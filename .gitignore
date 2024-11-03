@@ -1,2 +1,6 @@
 /.bsp/
 target/
+.bloop/
+.metals/
+.vscode/
+null/

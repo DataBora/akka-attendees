@@ -3,7 +3,6 @@ package actors
 import akka.actor.typed.{Behavior,ActorRef}
 import akka.actor.typed.scaladsl.AbstractBehavior
 import akka.actor.typed.scaladsl.ActorContext
-import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import scala.io.StdIn.readLine
 import java.io.IOException
@@ -14,14 +13,8 @@ import scala.util.Try
 
 object Greeter {
 
-  val attendees = List(("Bora","001") , ("Soka", "002"), ("Ficko","003"),("Oblo","004") ,("Kocko","005"))
+  // val attendees = List(("Bora","001") , ("Soka", "002"), ("Ficko","003"),("Oblo","004") ,("Kocko","005"))
 
-  // private case class State(attendee: String = "",
-  //                         currentAttendance: Int = 0, 
-  //                         totalIncome: Double = 0.0, 
-  //                         startTime: DateTime = DateTime.now(), 
-  //                         endTime: DateTime = DateTime.now(), 
-  //                         totalTimeSpent: Double= 0.0)
   private case class AttendeeTime(startTime: DateTime, endTime: Option[DateTime] = None)
 
   private case class State(
@@ -30,9 +23,8 @@ object Greeter {
   )
 
   sealed trait GreetCommand
-
-  final case class Greet(whom: String, id: String, replyTo: ActorRef[String]) extends GreetCommand
-  final case class Goodbye(whom: String, id: String, replyTo: ActorRef[String]) extends GreetCommand
+  case class Greet(whom: String, id: String, replyTo: ActorRef[String]) extends GreetCommand
+  case class Goodbye(whom: String, id: String, replyTo: ActorRef[String]) extends GreetCommand
 
   class GreeterBehavior(context: ActorContext[GreetCommand], state: State) extends AbstractBehavior[GreetCommand](context) {
 
@@ -56,7 +48,7 @@ object Greeter {
         case Goodbye(whom, id, replyTo) =>
             val endTime = DateTime.now()
 
-            // Read the attendance log to find the latest arrival time
+          
             val arrivalTime = try {
               val lines = Source.fromFile(filePath).getLines().toList
                val arrivalEntries = lines
@@ -78,20 +70,17 @@ object Greeter {
 
             // Calculate the time spent
             val timeSpent = (arrivalTime, endTime) match {
-            case (Some(start), _) =>
-              val durationInSeconds = new Duration(start, endTime).getStandardSeconds
-              durationInSeconds / 60.0
-            case _ => 0.0
-          }
+              case (Some(start), _) =>
+                val durationInSeconds = new Duration(start, endTime).getStandardSeconds
+                durationInSeconds / 60.0
+              case _ => 0.0
+            }
 
-         
-
-            // Log and respond
             val newState = state.copy(
               currentAttendance = math.max(state.currentAttendance - 1, 0)
-            )
-            context.log.info(f"Goodbye $whom (id: $id)! Time spent: $timeSpent%.2f minutes.")
-            replyTo ! f"Goodbye $whom (id: $id)! Time spent: $timeSpent%.2f minutes."
+              )
+              context.log.info(f"Goodbye $whom (id: $id)! Time spent: $timeSpent%.2f minutes.")
+              replyTo ! f"Goodbye $whom (id: $id)! Time spent: $timeSpent%.2f minutes."
 
             new GreeterBehavior(context, newState)
 
@@ -108,47 +97,10 @@ object Greeter {
     }
 
   }
-
-
-
-  // Factory method to create the actor behavior
+  
   def apply(): Behavior[GreetCommand] = 
     Behaviors.setup(context => new GreeterBehavior(context, State())) 
   
 }
 
-object Main {
-  def main(args: Array[String]): Unit = {
-    // Define a simple actor to handle replies from Greeter
-    val replyHandler: Behavior[String] = Behaviors.receiveMessage[String] { message =>
-      println(s"Reply received: $message")
-      Behaviors.same
-    }
-
-    // Create Actor Systems for reply handler and Greeter
-    val replyActorSystem: ActorSystem[String] = ActorSystem(replyHandler, "replyHandler")
-    val greeter: ActorSystem[Greeter.GreetCommand] = ActorSystem(Greeter(), "greeter")
-
-    // Send Greet messages to Greeter for each attendee
-    greeter ! Greeter.Greet("Bora", "001", replyActorSystem)
-    greeter ! Greeter.Greet("Ficko", "002", replyActorSystem)
-    greeter ! Greeter.Greet("Bocko", "003", replyActorSystem)
-
-    // Wait to simulate time spent at the event, then send Goodbye messages
-    Thread.sleep(5000) // Simulate time passing for the attendees
-
-    greeter ! Greeter.Goodbye("Bora", "001", replyActorSystem)
-
-    Thread.sleep(3000)
-    greeter ! Greeter.Goodbye("Ficko", "002", replyActorSystem)
-
-    Thread.sleep(70000)
-    greeter ! Greeter.Goodbye("Bocko", "003", replyActorSystem)
-
-    // Terminate the actor system after some delay to allow processing of all messages
-  
-    greeter.terminate()
-    replyActorSystem.terminate()
-  }
-}
 
