@@ -47,59 +47,65 @@ object Greeter {
             val newIncome = state.totalIncome + ticketPrice
             val startTime = DateTime.now()
 
-          writeToFile(s"$id, $whom, ${startTime.toString()}\n")
+          writeToFile(s"$id, $whom, arrival, ${startTime.toString()}\n")
           
           context.log.info(s"Hello $whom (id: $id)! Current attendance: $newAttendance, Total income: $newIncome")
           replyTo ! s"Hello $whom (id: $id)! Current attendance: $newAttendance, Total income: $newIncome, Arrival time: $startTime"
           new GreeterBehavior(context, state.copy(currentAttendance = newAttendance, totalIncome = newIncome))
 
         case Goodbye(whom, id, replyTo) =>
+            val endTime = DateTime.now()
 
-          val arrivalTime = try {
-            val lines = Source.fromFile("attendance_log.txt").getLines()
+            // Read the attendance log to find the latest arrival time
+            val arrivalTime = try {
+              val lines = Source.fromFile(filePath).getLines().toList
+               val arrivalEntries = lines
+                 .filter(line => line.startsWith(id + ", " + whom + ", arrival"))
+                 .map { line =>
+                val Array(_, _, _, arrivalTimeString) = line.split(",", 4)
+                DateTime.parse(arrivalTimeString.trim)
+              }
+
+              // Get the most recent arrival time
+            arrivalEntries.lastOption
+              } catch {
+                case e: Exception =>
+                  context.log.error("Error reading arrival time for {}: {}", whom, e.getMessage)
+                  None
+              }
             
-            val arrivalEntry = lines.find { line =>
-              val Array(entryId, entryName, _) = line.split(",", 3) 
-              entryId.trim == id && entryName.trim == whom
-            }
-          
-            arrivalEntry.map { entry =>
-              val Array(_, _, arrivalTimeString) = entry.split(",", 3)
-              DateTime.parse(arrivalTimeString.trim)
-            }
-          } catch {
-            case e: Exception =>
-              context.log.error("Error reading arrival time for {}: {}", whom, e.getMessage)
-              None
+             writeToFile(s"$id, $whom, departure, ${endTime.toString()}\n")
+
+            // Calculate the time spent
+            val timeSpent = (arrivalTime, endTime) match {
+            case (Some(start), _) =>
+              val durationInSeconds = new Duration(start, endTime).getStandardSeconds
+              durationInSeconds / 60.0
+            case _ => 0.0
           }
 
-          val endTime = DateTime.now()
-          val timeSpent = arrivalTime.map { start =>
-            val durationInSeconds = new Duration(start, endTime).getStandardSeconds
-            durationInSeconds / 60.0 
-          }.getOrElse(0.0)
+         
 
-          // Log and respond
-          val newState = state.copy(
-            currentAttendance = math.max(state.currentAttendance - 1, 0)
-          )
-          context.log.info(f"Goodbye $whom (id: $id)! Time spent: $timeSpent%.2f minutes.")
-          replyTo ! f"Goodbye $whom (id: $id)! Time spent: $timeSpent%.2f minutes."
+            // Log and respond
+            val newState = state.copy(
+              currentAttendance = math.max(state.currentAttendance - 1, 0)
+            )
+            context.log.info(f"Goodbye $whom (id: $id)! Time spent: $timeSpent%.2f minutes.")
+            replyTo ! f"Goodbye $whom (id: $id)! Time spent: $timeSpent%.2f minutes."
 
-          new GreeterBehavior(context, newState)
+            new GreeterBehavior(context, newState)
 
       }
     }
     
-  private def writeToFile(data: String): Unit ={
-    val writer = new PrintWriter(new java.io.FileOutputStream(new File(filePath), true))
-    try{
-      writer.write(data)
-    } finally {
-      writer.close()
+    private def writeToFile(data: String): Unit ={
+      val writer = new PrintWriter(new java.io.FileOutputStream(new File(filePath), true))
+      try{
+        writer.write(data)
+      } finally {
+        writer.close()
+      }
     }
-
-  }
 
   }
 
@@ -129,14 +135,18 @@ object Main {
     greeter ! Greeter.Greet("Bocko", "003", replyActorSystem)
 
     // Wait to simulate time spent at the event, then send Goodbye messages
-    Thread.sleep(30000) // Simulate time passing for the attendees
+    Thread.sleep(5000) // Simulate time passing for the attendees
 
     greeter ! Greeter.Goodbye("Bora", "001", replyActorSystem)
+
+    Thread.sleep(3000)
     greeter ! Greeter.Goodbye("Ficko", "002", replyActorSystem)
+
+    Thread.sleep(70000)
     greeter ! Greeter.Goodbye("Bocko", "003", replyActorSystem)
 
     // Terminate the actor system after some delay to allow processing of all messages
-    Thread.sleep(5000)
+  
     greeter.terminate()
     replyActorSystem.terminate()
   }
