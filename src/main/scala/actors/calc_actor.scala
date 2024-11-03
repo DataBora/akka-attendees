@@ -12,9 +12,7 @@ import scala.io.Source
 import scala.util.Try
 
 object Greeter {
-
   // val attendees = List(("Bora","001") , ("Soka", "002"), ("Ficko","003"),("Oblo","004") ,("Kocko","005"))
-
   private case class AttendeeTime(startTime: DateTime, endTime: Option[DateTime] = None)
 
   private case class State(
@@ -48,7 +46,6 @@ object Greeter {
         case Goodbye(whom, id, replyTo) =>
             val endTime = DateTime.now()
 
-          
             val arrivalTime = try {
               val lines = Source.fromFile(filePath).getLines().toList
                val arrivalEntries = lines
@@ -58,7 +55,6 @@ object Greeter {
                 DateTime.parse(arrivalTimeString.trim)
               }
 
-              // Get the most recent arrival time
             arrivalEntries.lastOption
               } catch {
                 case e: Exception =>
@@ -66,9 +62,8 @@ object Greeter {
                   None
               }
             
-             writeToFile(s"$id, $whom, departure, ${endTime.toString()}\n")
+            writeToFile(s"$id, $whom, departure, ${endTime.toString()}\n")
 
-            // Calculate the time spent
             val timeSpent = (arrivalTime, endTime) match {
               case (Some(start), _) =>
                 val durationInSeconds = new Duration(start, endTime).getStandardSeconds
@@ -83,7 +78,6 @@ object Greeter {
               replyTo ! f"Goodbye $whom (id: $id)! Time spent: $timeSpent%.2f minutes."
 
             new GreeterBehavior(context, newState)
-
       }
     }
     
@@ -100,7 +94,6 @@ object Greeter {
   
   def apply(): Behavior[GreetCommand] = 
     Behaviors.setup(context => new GreeterBehavior(context, State())) 
-  
 }
 
 
